@@ -1,5 +1,11 @@
 pragma solidity ^0.4.8;
 
+/**
+* Special Features:
+*	issuer can issue stock to addresses
+*	issuer can pay dividend to all addresses currently holding ZStock
+*/
+
 contract ZStock {
 
 	uint256 total_supply;
