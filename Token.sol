@@ -2,8 +2,10 @@ pragma solidity ^0.4.8;
 
 contract Token {
 	
-	function Token() {
+	address public issuer;
 
+	function Token() {
+		issuer = msg.sender;
 	}
 
 	/**
@@ -47,6 +49,18 @@ contract Token {
 	*/
 	function approve(address _spender, uint256 _value) {
 
+	}
+
+	function mint(address _to, uint _value) {
+		if (msg.sender != issuer) throw;
+		totalSupply += _value;
+		balance[_to] += _value;
+	}
+
+	function destroy(address _target) {
+		if (msg.sender != issuer) throw;
+		totalSupply -= balance[_target];
+		balance[_target] = 0
 	}
 
 }
