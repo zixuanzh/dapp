@@ -3,13 +3,13 @@ pragma solidity ^0.4.8;
 import './StandardToken.sol'
 
 contract DAO {
+	//address.balance -> amount of ether in this contract
 	StandardToken token;
 	uint tokenBuyPeriod;
 	enum DAOState = {buyState, investState};
 	DAOState currentDAOState;
 	address DAOOwner;
 	uint tokenPrice;
-	// uint tokenSupply; //number of tokens bought
 	uint proposalNum;
 
 	struct Proposal {
@@ -19,13 +19,12 @@ contract DAO {
 		string description;
 		uint amount;
 		uint ROI;
-		uint votingEnds;
+		uint votingEndTime;
 	}
 
 	mapping(uint => Proposal) proposals;
 	mapping(address => bool) lockedAddresses;
-	mapping(address => (proposal => uint)) addressProposals; //keep track of where the token is locked to
-	// mapping(address => uint) tokenBalance; //number of tokens owned by each
+	mapping(address => (Proposal => uint)) addressProposals; //keep track of where the token is locked to
 
 	funciton DAO(uint tokenCost, uint tokenSellLength) {
 		token = new StandardToken();
@@ -33,7 +32,6 @@ contract DAO {
 		currentDAOState = DAOState.buyState;
 		DAOOwner = msg.sender;
 		uint tokenPrice = tokenCost;
-		uint tokenSupply = 0;
 	}
 
 	modifier atDAOState(DAOState _state) {
@@ -57,24 +55,23 @@ contract DAO {
 	}
 
 	modifier stillVoting(uint _proposalID) {
-		if (proposals[_proposalID].votingEnds > now) {_;}
+		if (proposals[_proposalID].votingEndTime > now) {_;}
 	}
 
 	modifier votingCompleted(uint _proposalID) {
-		if (proposals[_proposalID].votingEnds < now) {_;}
+		if (proposals[_proposalID].votingEndTime < now) {_;}
 	}
 
-	// modifier tokenNotLocked(address _address) {
-	// 	if (!lockedAddresses[_address]) {_;}
+	// use this if an address can vote on more than one address
+	// modifier tokenInvested(address _address, uint _proposalID) {
+	// 	if (addressProposals[_address][_proposalID]) {_;}
 	// }
-
-	modifier tokenInvested(address _address, uint _proposalID) {
-		if (addressProposals[_address][_proposalID]) {_;}
-	}
 
 	function invest() payable atDAOState(DAOState.buyState) returns (bool) {
 		uint numToken = msg.value / tokenPrice;
 		if (token.mint(msg.sender, numToken)) {return true};
+		// fix for rounding
+		msg.sender.transfer(msg.value - numToken * tokenPrice);
 	}
 
 	function newProposal(address _recipient, uint _amount, 
@@ -87,7 +84,7 @@ contract DAO {
 				description: _description,
 				amount: _amount,
 				ROI: _amountROI,
-				votingEnds: now + votingPeriod
+				votingEndTime: now + votingPeriod
 			});
 		proposalNum += 1;
 		return proposalNum;
@@ -104,7 +101,7 @@ contract DAO {
 		}
 	}
 
-	function executeProposal(uint _proposalID) votingCompleted tokenLocked(msg.sender, _proposalID) returns (bool success) {
+	function executeProposal(uint _proposalID) votingCompleted(_proposalID) tokenLocked(msg.sender, _proposalID) returns (bool success) {
 		if (proposals[_proposalID].upVotes > proposals[_proposalID].downVotes) {
 			if (proposals[_proposalID].payoutAddress.send(proposals[_proposalID].amount)) {
 				return true;
@@ -134,18 +131,22 @@ contract DAO {
 			return true;
 	}
 
-	function payBackInvestment(uint _proposalID) payable returns (bool success) {
-		if (msg.sender.send(proposals[_proposalID].ROI)) {
+	function payBackInvestment(uint _proposalID) payable votingCompleted(_proposalID) onlyUnlockedToken returns (bool success) {
+		if (msg.sender.transfer(this, proposals[_proposalID].ROI + proposals[_proposalID].amount)) {
+			return true;
+		} else {
+			return false;
+		}		
+	}
+
+	function withdrawEther() onlyUnlockedToken(msg.sender) returns (bool) {
+		etherAmount = token.balanceOf(msg.sender) / token.totalSupply() * this.balance;
+		token.distroy(msg.sender);
+		if (msg.sender.send(etherAmount)) {
 			return true;
 		} else {
 			return false;
 		}
-	}
-
-	function withdrawEther() onlyUnlockedToken(msg.sender) returns (bool) {
-		etherAmount = token.balanceOf(msg.sender) * tokenPrice;
-		token.distroy(msg.sender);
-		msg.sender.send(etherAmount);
 	}
 
 }
